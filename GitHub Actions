@@ -1,0 +1,99 @@
+name: Production DevSecOps & GitOps Pipeline
+
+on:
+  push:
+    branches: [ "main", "release/*" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: registry.hms.gov.np
+  IMAGE_NAME: smart-hms/backend
+  HELM_REPO_URL: git@github.com:hospital-org/hms-gitops-manifests.git
+
+jobs:
+  security-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for SonarQube blame analysis
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies & Run Unit Tests
+        run: |
+          npm ci
+          npm run test:coverage
+
+      # 1. SonarQube Code Quality & Security Scan
+      - name: SonarQube SAST Security Scan
+        uses: SonarSource/sonarqube-scan-action@v2.0.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=smart-hms-backend
+            -Dsonar.sources=src
+            -Dsonar.tests=tests
+            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.qualitygate.wait=true
+
+      # 2. Build Docker Container
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Private Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build Docker Image Locally for Vulnerability Scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      # 3. Trivy Container Vulnerability Scanner
+      - name: Trivy Vulnerability Scan
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1' # Fails build if CRITICAL security issues are found
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      # 4. Push Image to Registry if Security Checks Pass
+      - name: Push Container Image to Registry
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      # 5. GitOps Manifest Update (Triggers ArgoCD Sync)
+      - name: Update GitOps Kubernetes Manifest Repository
+        run: |
+          git config --global user.name "HMS CI Bot"
+          git config --global user.email "ci-bot@hms.gov.np"
+          
+          # Clone manifest repo
+          git clone ${{ env.HELM_REPO_URL }} manifest-repo
+          cd manifest-repo/environments/production
+          
+          # Update Image Tag using Kustomize / yq
+          sed -i 's|newTag:.*|newTag: "${{ github.sha }}"|g' kustomization.yaml
+          
+          git add kustomization.yaml
+          git commit -m "chore(ci): update backend image tag to ${{ github.sha }} [skip ci]"
+          git push origin main
