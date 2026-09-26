@@ -72,7 +72,8 @@ terraform plan -out=tfplan
 
 terraform apply tfplan
 
-
+<img width="1536" height="1024" alt="shmis images" src="https://github.com/user-attachments/assets/5bddcf30-2cb7-4493-b74d-e391cdf3acc8" />
+<img width="1536" height="1024" alt="shmis images" src="https://github.com/user-attachments/assets/0f4bcbe4-f196-4084-aa34-93c104719f27" />
 
 
 
