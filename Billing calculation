@@ -1,0 +1,137 @@
+// ============================================================================
+// HIB & SSF Billing Calculation Engine for Nepal Smart HMS
+// ============================================================================
+
+export type CoverageScheme = 'PRIVATE_PAY' | 'HEALTH_INSURANCE_BOARD' | 'SOCIAL_SECURITY_FUND';
+
+export interface BillItem {
+  itemId: string;
+  itemName: string;
+  category: 'CONSULTATION' | 'DIAGNOSTIC' | 'MEDICINE' | 'PROCEDURE' | 'SURGICAL';
+  unitPrice: number;
+  quantity: number;
+  isInsuranceCovered: boolean; // के यो औषधी/सेवा बीमा सूचीमा समावेश छ?
+}
+
+export interface PatientInsuranceProfile {
+  scheme: CoverageScheme;
+  policyNumber: string; // HIB Card No or SSF Identification No
+  remainingAnnualBalance: number; // बाँकी बीमा रकम
+  copayPercentage: number; // e.g., 10 for 10% co-payment
+}
+
+export interface BillCalculationResult {
+  grossTotal: number;
+  coveredItemsSubtotal: number;
+  nonCoveredItemsSubtotal: number;
+  copayAmount: number;             // बिरामीले तिर्नुपर्ने Co-pay (१०%)
+  insuranceClaimableAmount: number; // बीमा बोर्ड/SSF ले व्यहोर्ने रकम
+  patientTotalPayable: number;     // बिरामीले काउन्टरमा नगद तिर्नुपर्ने जम्मा रकम
+  updatedInsuranceBalance: number; // दाबी पछिको बाँकी बीमा रकम
+  breakdown: Array<{
+    itemId: string;
+    itemName: string;
+    coveredAmount: number;
+    patientAmount: number;
+  }>;
+}
+
+export class HospitalBillingEngine {
+  /**
+   * HIB र SSF नियम अनुसार बिल र दाबी रकमको यकिन गणना गर्दछ
+   */
+  public static calculateBill(
+    items: BillItem[],
+    profile: PatientInsuranceProfile
+  ): BillCalculationResult {
+    let grossTotal = 0;
+    let coveredItemsSubtotal = 0;
+    let nonCoveredItemsSubtotal = 0;
+
+    const breakdown: BillCalculationResult['breakdown'] = [];
+
+    // 1. Calculate Gross and Filter Covered / Non-Covered Amounts
+    for (const item of items) {
+      const itemTotal = item.unitPrice * item.quantity;
+      grossTotal += itemTotal;
+
+      if (profile.scheme !== 'PRIVATE_PAY' && item.isInsuranceCovered) {
+        coveredItemsSubtotal += itemTotal;
+      } else {
+        nonCoveredItemsSubtotal += itemTotal;
+      }
+    }
+
+    // 2. Handle Private Pay (Non-insured)
+    if (profile.scheme === 'PRIVATE_PAY') {
+      return {
+        grossTotal,
+        coveredItemsSubtotal: 0,
+        nonCoveredItemsSubtotal: grossTotal,
+        copayAmount: 0,
+        insuranceClaimableAmount: 0,
+        patientTotalPayable: grossTotal,
+        updatedInsuranceBalance: 0,
+        breakdown: items.map((i) => ({
+          itemId: i.itemId,
+          itemName: i.itemName,
+          coveredAmount: 0,
+          patientAmount: i.unitPrice * i.quantity,
+        })),
+      };
+    }
+
+    // 3. Co-payment & Balance Cap Calculation
+    const rawCopay = (coveredItemsSubtotal * profile.copayPercentage) / 100;
+    const potentialClaimAmount = coveredItemsSubtotal - rawCopay;
+
+    // Check if claim exceeds remaining annual cap
+    let actualClaimAmount = 0;
+    let excessOverCap = 0;
+
+    if (potentialClaimAmount <= profile.remainingAnnualBalance) {
+      actualClaimAmount = potentialClaimAmount;
+    } else {
+      // Balance पुगेन भने बाँकी सबै रकम बिरामीले व्यहोर्नुपर्छ
+      actualClaimAmount = profile.remainingAnnualBalance;
+      excessOverCap = potentialClaimAmount - profile.remainingAnnualBalance;
+    }
+
+    const copayAmount = rawCopay;
+    const patientTotalPayable = nonCoveredItemsSubtotal + copayAmount + excessOverCap;
+    const updatedInsuranceBalance = profile.remainingAnnualBalance - actualClaimAmount;
+
+    // 4. Generate Line-Item Breakdown
+    for (const item of items) {
+      const itemTotal = item.unitPrice * item.quantity;
+      if (item.isInsuranceCovered) {
+        const itemCopay = (itemTotal * profile.copayPercentage) / 100;
+        const itemCovered = itemTotal - itemCopay;
+        breakdown.push({
+          itemId: item.itemId,
+          itemName: item.itemName,
+          coveredAmount: Number(itemCovered.toFixed(2)),
+          patientAmount: Number(itemCopay.toFixed(2)),
+        });
+      } else {
+        breakdown.push({
+          itemId: item.itemId,
+          itemName: item.itemName,
+          coveredAmount: 0,
+          patientAmount: itemTotal,
+        });
+      }
+    }
+
+    return {
+      grossTotal: Number(grossTotal.toFixed(2)),
+      coveredItemsSubtotal: Number(coveredItemsSubtotal.toFixed(2)),
+      nonCoveredItemsSubtotal: Number(nonCoveredItemsSubtotal.toFixed(2)),
+      copayAmount: Number(copayAmount.toFixed(2)),
+      insuranceClaimableAmount: Number(actualClaimAmount.toFixed(2)),
+      patientTotalPayable: Number(patientTotalPayable.toFixed(2)),
+      updatedInsuranceBalance: Number(updatedInsuranceBalance.toFixed(2)),
+      breakdown,
+    };
+  }
+}
