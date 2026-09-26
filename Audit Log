@@ -1,0 +1,9 @@
+# Audit Trail Logging Schema Concept
+class AuditTrailLog:
+    timestamp: datetime         # BS / AD Timestamp
+    actor_id: UUID              # कुन प्रयोगकर्ताले गर्यो (Doctor/Staff ID)
+    action: str                 # e.g., "UPDATE_INVOICE", "CANCEL_LAB_ORDER"
+    ip_address: str             # Client Client IP Address
+    resource_type: str          # e.g., "INVOICE", "PATIENT_RECORD"
+    old_values: dict | None     # परिवर्तन हुनुभन्दा अघिको डाटा
+    new_values: dict | None     # परिवर्तन पछिको डाटा
