@@ -52,6 +52,24 @@ docker-compose up -d --build
 
 docker-compose exec backend alembic upgrade head
 
+# Run Unit Tests with Coverage
+pytest tests/unit --cov=app --cov-report=term-missing
+
+# Run PostgreSQL Integration Tests (Requires Docker)
+pytest tests/integration -v
+
+
+cd terraform
+terraform init
+
+
+terraform plan -out=tfplan
+
+
+terraform apply tfplan
+
+
+
 
 
 
