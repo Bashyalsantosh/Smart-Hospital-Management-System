@@ -1,0 +1,80 @@
+import React, { useState } from 'react';
+
+interface WebDicomViewerProps {
+  patientName: string;
+  patientUhid: string;
+  studyInstanceUID: string;
+  viewerEmbedUrl: string;
+  onReportSave?: (reportNotes: string) => void;
+}
+
+export const WebDicomViewerContainer: React.FC<WebDicomViewerProps> = ({
+  patientName,
+  patientUhid,
+  studyInstanceUID,
+  viewerEmbedUrl,
+  onReportSave,
+}) => {
+  const [activeTool, setActiveTool] = useState<'WWWC' | 'ZOOM' | 'PAN' | 'LENGTH'>('WWWC');
+  const [radiologyReport, setRadiologyReport] = useState<string>('');
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#121212', color: '#fff' }}>
+      {/* 1. Viewer Control Toolbar */}
+      <div style={{ width: '250px', borderRight: '1px solid #333', padding: '15px' }}>
+        <h3>Medical Imaging Viewer</h3>
+        <p><strong>Patient:</strong> {patientName}</p>
+        <p><strong>UHID:</strong> {patientUhid}</p>
+        <hr style={{ borderColor: '#444' }} />
+
+        <h4>Viewport Tools</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <button
+            style={{ backgroundColor: activeTool === 'WWWC' ? '#007bff' : '#333', color: '#fff', padding: '8px' }}
+            onClick={() => setActiveTool('WWWC')}
+          >
+            Window/Level (WW/WC)
+          </button>
+          <button
+            style={{ backgroundColor: activeTool === 'ZOOM' ? '#007bff' : '#333', color: '#fff', padding: '8px' }}
+            onClick={() => setActiveTool('ZOOM')}
+          >
+            Zoom & Pan
+          </button>
+          <button
+            style={{ backgroundColor: activeTool === 'LENGTH' ? '#007bff' : '#333', color: '#fff', padding: '8px' }}
+            onClick={() => setActiveTool('LENGTH')}
+          >
+            Measurement (Ruler)
+          </button>
+        </div>
+
+        <hr style={{ borderColor: '#444', margin: '20px 0' }} />
+        <h4>Radiologist Impression</h4>
+        <textarea
+          rows={6}
+          style={{ width: '100%', backgroundColor: '#222', color: '#fff', padding: '8px' }}
+          placeholder="Enter findings and impression..."
+          value={radiologyReport}
+          onChange={(e) => setRadiologyReport(e.target.value)}
+        />
+        <button
+          style={{ marginTop: '10px', width: '100%', backgroundColor: '#28a745', color: '#fff', padding: '10px', border: 'none' }}
+          onClick={() => onReportSave && onReportSave(radiologyReport)}
+        >
+          Finalize Radiology Report
+        </button>
+      </div>
+
+      {/* 2. Zero-Footprint Canvas Frame (Embedded OHIF DICOM Engine) */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <iframe
+          src={`${viewerEmbedUrl}&tool=${activeTool}`}
+          title="Zero-Footprint DICOM Canvas"
+          style={{ width: '100%', height: '100%', border: 'none' }}
+          allow="autoplay; encrypted-media"
+        />
+      </div>
+    </div>
+  );
+};
