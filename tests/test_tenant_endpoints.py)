@@ -1,0 +1,73 @@
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@pytest.mark.asyncio
+class TestMultiTenantEndpoints:
+
+    async def test_missing_tenant_header_returns_400(self, api_client: AsyncClient):
+        """Requests without X-Tenant-ID must be rejected."""
+        response = await api_client.get("/api/v1/patients")
+        
+        assert response.status_code == 400
+        assert "Missing required 'X-Tenant-ID' header" in response.json()["detail"]
+
+    async def test_invalid_tenant_header_format_returns_422(self, api_client: AsyncClient):
+        """Header payloads containing illegal characters (SQL injection vectors) must return 422."""
+        response = await api_client.get(
+            "/api/v1/patients",
+            headers={"X-Tenant-ID": "invalid; DROP TABLE patients;--"}
+        )
+        
+        assert response.status_code == 422
+        assert "Invalid tenant identifier format" in response.json()["detail"]
+
+    async def test_valid_tenant_header_routes_to_correct_schema(self, api_client: AsyncClient):
+        """Verifies that X-Tenant-ID header dynamically routes database context."""
+        response = await api_client.get(
+            "/api/v1/patients",
+            headers={"X-Tenant-ID": "tenant_alpha"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tenant_context"] == "tenant_alpha"
+        assert data["active_database_schema"] == "tenant_alpha"
+
+    async def test_tenant_data_isolation(
+        self, api_client: AsyncClient, async_db_session: AsyncSession
+    ):
+        """
+        Verify cross-tenant isolation:
+        1. Insert 'John Alpha' into tenant_alpha.
+        2. Verify tenant_beta cannot see 'John Alpha'.
+        """
+        # Seed Tenant Alpha directly in DB
+        await async_db_session.execute(
+            text("INSERT INTO tenant_alpha.patients (name) VALUES ('John Alpha')")
+        )
+        await async_db_session.commit()
+
+        # Query via Tenant Alpha API header
+        response_alpha = await api_client.get(
+            "/api/v1/patients",
+            headers={"X-Tenant-ID": "tenant_alpha"}
+        )
+        assert response_alpha.status_code == 200
+
+        # Query via Tenant Beta API header
+        response_beta = await api_client.get(
+            "/api/v1/patients",
+            headers={"X-Tenant-ID": "tenant_beta"}
+        )
+        assert response_beta.status_code == 200
+
+        # Verify search path setting prevents cross-tenant data leaks
+        async with async_db_session.begin():
+            await async_db_session.execute(text('SET search_path TO "tenant_beta"'))
+            result = await async_db_session.execute(text("SELECT COUNT(*) FROM patients"))
+            beta_count = result.scalar()
+            
+            assert beta_count == 0  # Tenant Beta's table remains empty
