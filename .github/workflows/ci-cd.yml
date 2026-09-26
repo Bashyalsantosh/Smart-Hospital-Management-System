@@ -1,0 +1,50 @@
+name: HMIS Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: hmis_user
+          POSTGRES_PASSWORD: hmis_password
+          POSTGRES_DB: hmis_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest httpx
+
+    - name: Run Database Migrations
+      env:
+        DATABASE_URL: postgresql+asyncpg://hmis_user:hmis_password@localhost:5432/hmis_db
+      run: |
+        alembic upgrade head
+
+    - name: Build Docker Image
+      run: |
+        docker build -t hmis-backend:latest .
