@@ -1,0 +1,211 @@
+// ============================================================================
+// 1. HL7 FHIR R4 Standard Data Contracts
+// ============================================================================
+
+export type EncounterStatus = 'planned' | 'arrived' | 'triaged' | 'in-progress' | 'onleave' | 'finished' | 'cancelled';
+export type MedicationRequestStatus = 'active' | 'on-hold' | 'cancelled' | 'completed' | 'entered-in-error' | 'stopped' | 'draft';
+export type MedicationRequestIntent = 'proposal' | 'plan' | 'order' | 'original-order' | 'reflex-order' | 'filler-order' | 'instance-order' | 'option';
+
+export interface FHIRIdentifier {
+  system: string; // e.g., 'https://mrhis.gov.np/identifier/uhid'
+  value: string;
+}
+
+export interface FHIRReference {
+  reference: string; // e.g., 'Patient/NEP-HP101-2081-000492'
+  display?: string;
+}
+
+export interface FHIRCodeableConcept {
+  coding: Array<{
+    system: string; // SNOMED CT, ICD-11, or Local MoHP System
+    code: string;
+    display: string;
+  }>;
+  text?: string;
+}
+
+// ----------------------------------------------------------------------------
+// FHIR Encounter Resource Interface
+// ----------------------------------------------------------------------------
+export interface FHIREncounter {
+  resourceType: 'Encounter';
+  id?: string;
+  identifier: FHIRIdentifier[];
+  status: EncounterStatus;
+  class: {
+    system: string;
+    code: string; // e.g., 'AMB' (Outpatient/Ambulatory), 'IMP' (Inpatient)
+    display: string;
+  };
+  subject: FHIRReference; // Link to Patient
+  participant: Array<{
+    individual: FHIRReference; // Link to Doctor/Practitioner
+  }>;
+  period: {
+    start: string; // ISO 8601 Timestamp
+    end?: string;
+  };
+  reasonCode?: FHIRCodeableConcept[];
+  serviceProvider?: FHIRReference; // Hospital/Clinic Org Reference
+}
+
+// ----------------------------------------------------------------------------
+// FHIR MedicationRequest (Prescription) Interface
+// ----------------------------------------------------------------------------
+export interface FHIRMedicationRequest {
+  resourceType: 'MedicationRequest';
+  id?: string;
+  identifier: FHIRIdentifier[];
+  status: MedicationRequestStatus;
+  intent: MedicationRequestIntent;
+  medicationCodeableConcept: FHIRCodeableConcept; // Medicine Name & Generic Code
+  subject: FHIRReference; // Patient
+  encounter?: FHIRReference; // Associated Visit
+  authoredOn: string; // Prescribed Date
+  requester: FHIRReference; // Doctor
+  dosageInstruction: Array<{
+    text: string; // e.g., "1 गोलि बिहान र बेलुका खानापछि"
+    timing?: {
+      repeat?: {
+        frequency: number;
+        period: number;
+        periodUnit: 'd' | 'wk' | 'm'; // day, week, month
+      };
+    };
+    route?: FHIRCodeableConcept; // e.g., Oral, Topical
+  }>;
+}
+
+// ============================================================================
+// 2. FHIR Resource Builder Engine
+// ============================================================================
+
+export class FHIRSmartHospitalEngine {
+  private static MHP_IDENTIFIER_BASE = 'https://mrhis.gov.np/identifier';
+
+  /**
+   * Generates HL7 FHIR Compliant Patient Encounter Resource
+   */
+  public static createEncounterResource(params: {
+    encounterId: string;
+    patientUhid: string;
+    patientName: string;
+    doctorId: string;
+    doctorName: string;
+    hospitalCode: string;
+    visitType: 'AMB' | 'IMP' | 'EMER'; // Outpatient, Inpatient, Emergency
+    startDate: Date;
+    icd11Code?: string;
+    icd11Description?: string;
+  }): FHIREncounter {
+    return {
+      resourceType: 'Encounter',
+      id: params.encounterId,
+      identifier: [
+        {
+          system: `${this.MHP_IDENTIFIER_BASE}/encounter-id`,
+          value: params.encounterId,
+        },
+      ],
+      status: 'in-progress',
+      class: {
+        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+        code: params.visitType,
+        display: params.visitType === 'AMB' ? 'Ambulatory (OPD)' : 'Inpatient (IPD)',
+      },
+      subject: {
+        reference: `Patient/${params.patientUhid}`,
+        display: params.patientName,
+      },
+      participant: [
+        {
+          individual: {
+            reference: `Practitioner/${params.doctorId}`,
+            display: params.doctorName,
+          },
+        },
+      ],
+      period: {
+        start: params.startDate.toISOString(),
+      },
+      reasonCode: params.icd11Code
+        ? [
+            {
+              coding: [
+                {
+                  system: 'http://id.who.int/icd/release/11/mms',
+                  code: params.icd11Code,
+                  display: params.icd11Description || 'Clinical Finding',
+                },
+              ],
+              text: params.icd11Description,
+            },
+          ]
+        : [],
+      serviceProvider: {
+        reference: `Organization/${params.hospitalCode}`,
+      },
+    };
+  }
+
+  /**
+   * Generates HL7 FHIR Compliant MedicationRequest (Prescription) Resource
+   */
+  public static createPrescriptionResource(params: {
+    prescriptionId: string;
+    patientUhid: string;
+    encounterId: string;
+    doctorId: string;
+    medicineBrandName: string;
+    genericCodeSNOMED?: string;
+    instructionsInNepali: string;
+    frequencyPerDay: number;
+    durationDays: number;
+  }): FHIRMedicationRequest {
+    return {
+      resourceType: 'MedicationRequest',
+      id: params.prescriptionId,
+      identifier: [
+        {
+          system: `${this.MHP_IDENTIFIER_BASE}/prescription-id`,
+          value: params.prescriptionId,
+        },
+      ],
+      status: 'active',
+      intent: 'order',
+      medicationCodeableConcept: {
+        coding: [
+          {
+            system: 'http://snomed.info/sct',
+            code: params.genericCodeSNOMED || '372667008', // Default Generic Medicine Code
+            display: params.medicineBrandName,
+          },
+        ],
+        text: params.medicineBrandName,
+      },
+      subject: {
+        reference: `Patient/${params.patientUhid}`,
+      },
+      encounter: {
+        reference: `Encounter/${params.encounterId}`,
+      },
+      authoredOn: new Date().toISOString(),
+      requester: {
+        reference: `Practitioner/${params.doctorId}`,
+      },
+      dosageInstruction: [
+        {
+          text: params.instructionsInNepali,
+          timing: {
+            repeat: {
+              frequency: params.frequencyPerDay,
+              period: 1,
+              periodUnit: 'd',
+            },
+          },
+        },
+      ],
+    };
+  }
+}
