@@ -1,0 +1,84 @@
+-- Production Grade Smart HMS Schema (PostgreSQL)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. ROLES & USERS
+CREATE TYPE user_role_enum AS ENUM (
+    'SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 
+    'RECEPTIONIST', 'PHARMACIST', 'LAB_STAFF', 'ACCOUNTANT', 'PATIENT'
+);
+
+CREATE TABLE users (
+    user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    role user_role_enum NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    phone_number VARCHAR(15) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. PATIENT MASTER (Supports Dual DOB for BS/AD)
+CREATE TABLE patients (
+    patient_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    uhid VARCHAR(30) UNIQUE NOT NULL, -- Format: NEP-HP101-2081-XXXX
+    full_name_en VARCHAR(100) NOT NULL,
+    full_name_np VARCHAR(100),
+    gender VARCHAR(10) NOT NULL,
+    dob_ad DATE NOT NULL,
+    dob_bs VARCHAR(10) NOT NULL, -- Format: YYYY-MM-DD
+    phone_number VARCHAR(15) NOT NULL,
+    address_district VARCHAR(50) NOT NULL,
+    address_municipality VARCHAR(50) NOT NULL,
+    ward_no INT NOT NULL,
+    emergency_contact_phone VARCHAR(15),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. EMR / CLINICAL CONSULTATION
+CREATE TABLE clinical_consultations (
+    consultation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    patient_id UUID NOT NULL REFERENCES patients(patient_id),
+    doctor_id UUID NOT NULL REFERENCES users(user_id),
+    chief_complaints TEXT NOT NULL,
+    clinical_findings TEXT,
+    icd11_diagnosis_code VARCHAR(20),
+    icd11_diagnosis_description TEXT,
+    vitals_bp_systolic INT,
+    vitals_bp_diastolic INT,
+    vitals_pulse_rate INT,
+    vitals_temperature_f NUMERIC(4,1),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. PHARMACY INVENTORY (FEFO Protocol Enabled)
+CREATE TABLE pharmacy_inventory (
+    inventory_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    medicine_name VARCHAR(150) NOT NULL,
+    generic_name VARCHAR(150) NOT NULL,
+    batch_number VARCHAR(50) NOT NULL,
+    expiry_date DATE NOT NULL,
+    quantity_in_stock INT NOT NULL CHECK (quantity_in_stock >= 0),
+    unit_price NUMERIC(10, 2) NOT NULL,
+    reorder_level INT DEFAULT 50,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. IMMUTABLE SECURITY AUDIT LOGS
+CREATE TABLE security_audit_logs (
+    log_id BIGSERIAL PRIMARY KEY,
+    actor_id UUID REFERENCES users(user_id),
+    action VARCHAR(50) NOT NULL, -- e.g., READ_EMR, UPDATE_PRESCRIPTION
+    resource_accessed VARCHAR(100) NOT NULL,
+    patient_id UUID REFERENCES patients(patient_id),
+    ip_address INET NOT NULL,
+    user_agent TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- INDEXES FOR HIGH PERFORMANCE QUEUES & SEARCH
+CREATE INDEX idx_patients_uhid ON patients(uhid);
+CREATE INDEX idx_patients_phone ON patients(phone_number);
+CREATE INDEX idx_fefo_expiry ON pharmacy_inventory(expiry_date, quantity_in_stock);
+CREATE INDEX idx_audit_actor ON security_audit_logs(actor_id, timestamp);
