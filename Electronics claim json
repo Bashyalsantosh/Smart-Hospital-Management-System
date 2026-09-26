@@ -1,0 +1,24 @@
+{
+  "claimHeader": {
+    "claimId": "CLM-2081-88910",
+    "hospitalCode": "HP101",
+    "patientUhid": "NEP-HP101-2081-000492",
+    "policyNumber": "INS-908123-2081",
+    "scheme": "HEALTH_INSURANCE_BOARD",
+    "encounterId": "ENC-2081-0091",
+    "submissionDate": "2026-09-26T19:30:00Z"
+  },
+  "financialSummary": {
+    "grossTotal": 4500.00,
+    "claimableAmount": 3600.00,
+    "copayPaidByPatient": 400.00,
+    "nonCoveredPaidByPatient": 500.00
+  },
+  "diagnosisCodes": [
+    { "system": "ICD-11", "code": "1B10", "display": "Tuberculosis of lung" }
+  ],
+  "lineItems": [
+    { "serviceCode": "SRV-LAB-01", "serviceName": "Complete Blood Count", "amount": 500.00, "claimAmount": 450.00 },
+    { "serviceCode": "SRV-RAD-04", "serviceName": "Chest X-Ray PA View", "amount": 800.00, "claimAmount": 720.00 }
+  ]
+}
