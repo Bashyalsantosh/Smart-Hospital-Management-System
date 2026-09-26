@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # Fast API HMIS Backend
+  hmis-backend:
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/hmis-backend:latest
+    container_name: hmis-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://hmis_admin:${DB_PASSWORD}@${DB_HOST}:5432/hmis_db
+      - REDIS_URL=redis://${REDIS_HOST}:6379/0
+      - AWS_REGION=us-east-1
+      - S3_MEDICAL_RECORDS_BUCKET=smart-hospital-patient-records-prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # IoT Telemetry / Vitals Ingestion Worker
+  iot-vitals-worker:
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/hmis-iot-worker:latest
+    container_name: iot-vitals-worker
+    restart: always
+    environment:
+      - AWS_REGION=us-east-1
+      - IOT_CORE_ENDPOINT=a3xxxxxxxxxxxx-ats.iot.us-east-1.amazonaws.com
+      - KINESIS_STREAM_NAME=hospital-vitals-telemetry-stream
