@@ -1,9 +1,13 @@
- Smart Hospital Management System (HMIS)
+Smart Hospital Management System (HMIS)
+
+
 The Smart Hospital Management System (HMIS) is a multi-tenant, cloud-native enterprise platform designed to manage hospital operations, patient records, billing, tenant administration, and medical imaging workflows.
 
 The repository contains an asynchronous Python backend (FastAPI/SQLAlchemy), PostgreSQL/Aurora database migrations (Alembic), DICOM medical imaging web components (React), Infrastructure as Code (Terraform for AWS ECS/Aurora/KMS/S3/OIDC), and continuous integration pipelines (GitHub Actions).
 
 ---
+
+
 
 ## 📂 Repository Structure
 
