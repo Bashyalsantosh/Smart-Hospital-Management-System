@@ -3,29 +3,32 @@
 
 The repository contains an asynchronous Python backend (FastAPI/SQLAlchemy), PostgreSQL/Aurora database migrations (Alembic), DICOM medical imaging web components (React), Infrastructure as Code (Terraform for AWS ECS/Aurora/KMS/S3/OIDC), and continuous integration pipelines (GitHub Actions).
 
+---
+
+## 📂 Repository Structure
+
+```text
 Smart-Hospital-Management-System/
 ├── .github/
 │   └── workflows/
-│       └── terraform.yml          # GitHub Actions pipeline for Terraform lint & plan
+│       └── terraform.yml          # CI/CD pipeline for Terraform lint & plan
 ├── alembic/                       # Alembic database migration scripts and env setup
 ├── app/
-│   ├── repositories/             # Data access repositories (AppointmentRepository)
-│   ├── API endpoints             # Hospital tenant and administrative routes
+│   ├── repositories/              # Async Data access layer (AppointmentRepository, etc.)
+│   ├── api/                       # Multi-tenant hospital & administrative API endpoints
 │   └── config.py                  # Core application configuration settings
 ├── react/
-│   └── WebDicomViewerContainer    # React component for browser DICOM rendering
-├── terraform/ (Root Infrastructure)
+│   └── WebDicomViewerContainer/   # React component for browser DICOM rendering
+├── terraform/                     # Infrastructure as Code (AWS Provisioning)
 │   ├── aurora.tf                  # Amazon Aurora PostgreSQL cluster config
 │   ├── backend-bootstrap.tf       # S3 & DynamoDB remote state bootstrapping
-│   ├── ecs.tf                     # ECS Fargate cluster, task definitions, and services
-│   ├── kms.tf / km.tf             # KMS customer managed keys for data encryption
+│   ├── ecs.tf                     # ECS Fargate cluster, task definitions, & services
+│   ├── kms.tf                     # Customer Managed Keys (CMK) for data encryption
 │   ├── oidc-github.tf             # AWS IAM OpenID Connect provider for GitHub Actions
-│   ├── outputs.tf                 # Terraform output values
-│   ├── providers.tf               # AWS provider version requirements
-│   ├── s3.tf                      # Encrypted S3 buckets for hospital storage
-│   ├── vpc.tf                     # Multi-AZ VPC network infrastructure
-│   └── variables.tf               # Terraform input parameters
-├── Dockerfile                     # Multi-stage Python build file
+│   ├── s3.tf                      # Encrypted S3 buckets for hospital assets
+│   └── vpc.tf                     # Multi-AZ VPC network isolation
+├── Dockerfile                     # Multi-stage Python production build file
+└── docker-compose.yml             # Local multi-container development environment
 
 git clone https://github.com/Bashyalsantosh/Smart-Hospital-Management-System.git
 cd Smart-Hospital-Management-System
