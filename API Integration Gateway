@@ -1,0 +1,82 @@
+import crypto from 'crypto';
+
+// ============================================================================
+// DICOMweb API Integration Gateway for Smart HMS
+// ============================================================================
+
+export interface DICOMStudyMetadata {
+  studyInstanceUID: string;
+  patientUhid: string;
+  patientName: string;
+  modality: 'CR' | 'DX' | 'CT' | 'MR' | 'US';
+  studyDate: string;
+  description: string;
+  numberOfInstances: number;
+}
+
+export class PACSIntegrationEngine {
+  private pacsBaseUrl: string;
+  private secretTokenKey: string;
+
+  constructor(pacsBaseUrl: string, secretTokenKey: string) {
+    this.pacsBaseUrl = pacsBaseUrl;
+    this.secretTokenKey = secretTokenKey;
+  }
+
+  /**
+   * Secure Embed Token उत्पन्न गर्छ ताकि Unauthenticated प्रयोगकर्ताले DICOM Direct Access नपाउन्
+   */
+  public generateSecureViewerToken(
+    patientUhid: string,
+    studyInstanceUID: string,
+    expiresInMinutes: number = 30
+  ): { viewerUrl: string; expiresAt: number } {
+    const expiresAt = Math.floor(Date.now() / 1000) + expiresInMinutes * 60;
+    const payload = `${patientUhid}:${studyInstanceUID}:${expiresAt}`;
+    
+    const signature = crypto
+      .createHmac('sha256', this.secretTokenKey)
+      .update(payload)
+      .digest('hex');
+
+    const secureToken = Buffer.from(`${payload}:${signature}`).toString('base64url');
+    const viewerUrl = `${this.pacsBaseUrl}/viewer?study=${encodeURIComponent(
+      studyInstanceUID
+    )}&auth=${secureToken}`;
+
+    return {
+      viewerUrl,
+      expiresAt,
+    };
+  }
+
+  /**
+   * DICOMweb QIDO-RS REST Protocol प्रयोग गरी Study Metadata Query गर्दछ
+   */
+  public async fetchPatientStudies(patientUhid: string): Promise<DICOMStudyMetadata[]> {
+    // Production API Call Simulation to Orthanc DICOMweb Server
+    const response = await fetch(`${this.pacsBaseUrl}/dicom-web/studies?PatientID=${patientUhid}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/dicom+json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`PACS Gateway Server Error: ${response.statusText}`);
+    }
+
+    const rawDicomJson = await response.json();
+
+    // Map DICOM Tag Elements (0020,000D -> StudyInstanceUID, 0008,0060 -> Modality)
+    return rawDicomJson.map((study: any) => ({
+      studyInstanceUID: study['0020000D']?.Value?.[0] || '',
+      patientUhid: study['00100020']?.Value?.[0] || patientUhid,
+      patientName: study['00100010']?.Value?.[0]?.Alphabetic || 'Unknown',
+      modality: study['00080060']?.Value?.[0] || 'DX',
+      studyDate: study['00080020']?.Value?.[0] || '',
+      description: study['00081030']?.Value?.[0] || 'Radiology Study',
+      numberOfInstances: study['00201208']?.Value?.[0] || 1,
+    }));
+  }
+}
