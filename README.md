@@ -39,10 +39,26 @@ ENVIRONMENT=development
 
 docker-compose exec backend alembic upgrade head
 
+git clone [https://github.com/Bashyalsantosh/Smart-Hospital-Management-System.git](https://github.com/Bashyalsantosh/Smart-Hospital-Management-System.git)
+cd Smart-Hospital-Management-System
+
+
+DATABASE_URL=postgresql+asyncpg://hmis_user:hmis_password@localhost:5432/hmis_db
+SECRET_KEY=super-secret-production-key
+ENVIRONMENT=development
+
+docker-compose up -d --build
+
+
+docker-compose exec backend alembic upgrade head
 
 
 
 
-├── docker-compose.yml             # Local multi-container development environment
+
+
+
+
+
 ├── docker-compose.aws.yml         # AWS-specific local emulation container layout
 └── template.yaml                  # AWS SAM serverless infrastructure specification
