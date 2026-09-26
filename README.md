@@ -60,5 +60,3 @@ docker-compose exec backend alembic upgrade head
 
 
 
-├── docker-compose.aws.yml         # AWS-specific local emulation container layout
-└── template.yaml                  # AWS SAM serverless infrastructure specification
